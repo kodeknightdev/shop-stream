@@ -29,7 +29,7 @@ public static class AuthEndpoints
 
     private static async Task<IResult> Register(RegisterRequest request, IdentityDbContext db, IPasswordHasher hasher, ITokenService tokens, CancellationToken ct)
     {
-        var email = request.Email.Trim();
+        var email = request.Email.Trim().ToLowerInvariant();
         if (await db.Users.AnyAsync(u => u.Email == email, ct))
         {
             throw new ConflictException("An account with that email already exists.");
@@ -45,7 +45,7 @@ public static class AuthEndpoints
 
     private static async Task<IResult> Login(LoginRequest request, IdentityDbContext db, IPasswordHasher hasher, ITokenService tokens, ILoggerFactory loggers, CancellationToken ct)
     {
-        var email = request.Email.Trim();
+        var email = request.Email.Trim().ToLowerInvariant();
         var user = await db.Users.SingleOrDefaultAsync(u => u.Email == email, ct);
 
         if (user is null || !hasher.Verify(request.Password, user.PasswordHash))
