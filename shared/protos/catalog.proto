@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package shopstream.catalog.v1;
+
+option csharp_namespace = "ShopStream.Protos.Catalog";
+
+service CatalogService {
+  rpc GetProduct (GetProductRequest) returns (ProductReply);
+  rpc GetProductsByIds (GetProductsByIdsRequest) returns (GetProductsByIdsReply);
+}
+
+message GetProductRequest {
+  string product_id = 1;
+}
+
+message GetProductsByIdsRequest {
+  repeated string product_ids = 1;
+}
+
+message ProductReply {
+  string id = 1;
+  string sku = 2;
+  string name = 3;
+  // cents, avoids floats on the wire
+  int64 price_cents = 4;
+  string currency = 5;
+  bool is_active = 6;
+  string image_url = 7;
+}
+
+message GetProductsByIdsReply {
+  repeated ProductReply products = 1;
+  repeated string missing_ids = 2;
+}

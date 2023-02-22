@@ -3,9 +3,10 @@
     "ShopStream.Catalog": {
       "commandName": "Project",
       "launchBrowser": false,
-      "applicationUrl": "http://localhost:5002",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "Kestrel__Endpoints__Http__Url": "http://localhost:5002",
+        "Kestrel__Endpoints__Grpc__Url": "http://localhost:5012"
       }
     }
   }
