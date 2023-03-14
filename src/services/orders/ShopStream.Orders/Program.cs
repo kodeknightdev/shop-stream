@@ -1,16 +1,61 @@
 using Microsoft.EntityFrameworkCore;
 using ShopStream.BuildingBlocks;
+using ShopStream.BuildingBlocks.Auth;
+using ShopStream.BuildingBlocks.Correlation;
+using ShopStream.BuildingBlocks.Health;
+using ShopStream.Orders.Application;
+using ShopStream.Orders.Clients;
 using ShopStream.Orders.Data;
+using ShopStream.Orders.Endpoints;
+using ShopStream.Protos.Catalog;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.AddServiceDefaults("orders", typeof(Program));
+builder.AddServiceDefaults("orders", typeof(PlaceOrderRequestValidator));
+
 builder.Services.AddDbContext<OrdersDbContext>(o => o.UseNpgsql(builder.Configuration.GetConnectionString("OrdersDb")));
+builder.Services.AddHealthChecks().AddDbContextCheck<OrdersDbContext>("postgres", tags: new[] { HealthEndpoints.ReadyTag });
+builder.Services.AddShopStreamJwt(builder.Configuration);
+
+builder.Services.AddScoped<PlaceOrderService>();
+
+// all outgoing calls go through ResiliencePolicies
+var resilience = builder.Configuration.GetSection(ResilienceOptions.SectionName).Get<ResilienceOptions>() ?? new ResilienceOptions();
+using var resilienceLogs = LoggerFactory.Create(l => l.AddConsole());
+
+builder.Services
+    .AddGrpcClient<CatalogService.CatalogServiceClient>(o => o.Address = new Uri(builder.Configuration["Services:CatalogGrpc"]!))
+    .AddHttpMessageHandler<CorrelationIdDelegatingHandler>();
+builder.Services.AddSingleton(new CatalogResilience(ResiliencePolicies.ForGrpc("catalog", resilience, resilienceLogs.CreateLogger("Resilience.Catalog"))));
+builder.Services.AddScoped<ICatalogClient, GrpcCatalogClient>();
+
+builder.Services
+    .AddHttpClient<ICartClient, HttpCartClient>(c => c.BaseAddress = new Uri(builder.Configuration["Services:Cart"]!))
+    .AddHttpMessageHandler<CorrelationIdDelegatingHandler>()
+    .AddPolicyHandler(ResiliencePolicies.ForHttp("cart", resilience, resilienceLogs.CreateLogger("Resilience.Cart")));
 
 var app = builder.Build();
 
 app.UseServiceDefaults();
-app.MapGet("/health", () => Results.Ok(new { status = "Healthy" }));
+app.UseAuthentication();
+app.UseAuthorization();
+
+app.MapShopStreamHealth();
+app.MapOrderEndpoints();
+
+if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("Database:MigrateOnStartup"))
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    var db = scope.ServiceProvider.GetRequiredService<OrdersDbContext>();
+    if (db.Database.IsRelational())
+    {
+        await db.Database.MigrateAsync();
+    }
+    else
+    {
+        await db.Database.EnsureCreatedAsync();
+    }
+}
 
 app.Run();
 
