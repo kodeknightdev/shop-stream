@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using System.Text.Json;
+using ShopStream.BuildingBlocks.Kafka;
 
 namespace ShopStream.Orders.Clients;
 
@@ -17,7 +17,6 @@ public interface ICartClient
 // uses the caller's token, so cart needs no internal endpoint
 public sealed class HttpCartClient : ICartClient
 {
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private readonly HttpClient _http;
 
     public HttpCartClient(HttpClient http) => _http = http;
@@ -33,7 +32,7 @@ public sealed class HttpCartClient : ICartClient
         }
 
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<Cart>(Json, ct);
+        return await response.Content.ReadFromJsonAsync<Cart>(JsonDefaults.Options, ct);
     }
 
     public async Task ClearCartAsync(string bearerToken, CancellationToken ct)
