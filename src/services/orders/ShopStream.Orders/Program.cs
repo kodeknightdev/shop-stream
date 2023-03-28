@@ -3,6 +3,8 @@ using ShopStream.BuildingBlocks;
 using ShopStream.BuildingBlocks.Auth;
 using ShopStream.BuildingBlocks.Correlation;
 using ShopStream.BuildingBlocks.Health;
+using ShopStream.BuildingBlocks.Kafka;
+using ShopStream.BuildingBlocks.Messaging;
 using ShopStream.Orders.Application;
 using ShopStream.Orders.Clients;
 using ShopStream.Orders.Data;
@@ -16,8 +18,10 @@ builder.AddServiceDefaults("orders", typeof(PlaceOrderRequestValidator));
 builder.Services.AddDbContext<OrdersDbContext>(o => o.UseNpgsql(builder.Configuration.GetConnectionString("OrdersDb")));
 builder.Services.AddHealthChecks().AddDbContextCheck<OrdersDbContext>("postgres", tags: new[] { HealthEndpoints.ReadyTag });
 builder.Services.AddShopStreamJwt(builder.Configuration);
+builder.Services.AddShopStreamKafka(builder.Configuration);
 
 builder.Services.AddScoped<PlaceOrderService>();
+builder.Services.AddOutboxRelay<OrdersDbContext>(builder.Configuration);
 
 // all outgoing calls go through ResiliencePolicies
 var resilience = builder.Configuration.GetSection(ResilienceOptions.SectionName).Get<ResilienceOptions>() ?? new ResilienceOptions();

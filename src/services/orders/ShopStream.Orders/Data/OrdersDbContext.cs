@@ -1,14 +1,18 @@
 using Microsoft.EntityFrameworkCore;
+using ShopStream.BuildingBlocks.Messaging;
 using ShopStream.Orders.Domain;
 
 namespace ShopStream.Orders.Data;
 
-public sealed class OrdersDbContext : DbContext
+public sealed class OrdersDbContext : DbContext, IOutboxDbContext, IInboxDbContext
 {
     public OrdersDbContext(DbContextOptions<OrdersDbContext> options) : base(options) { }
 
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<OrderStatusChange> StatusHistory => Set<OrderStatusChange>();
+    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+    public DbSet<ProcessedEvent> ProcessedEvents => Set<ProcessedEvent>();
+    public DbSet<IdempotencyRecord> IdempotencyRecords => Set<IdempotencyRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -59,6 +63,15 @@ public sealed class OrdersDbContext : DbContext
             b.Property(h => h.From).HasConversion<string>().HasMaxLength(32);
             b.Property(h => h.To).HasConversion<string>().HasMaxLength(32);
             b.Property(h => h.Note).HasMaxLength(500);
+        });
+
+        modelBuilder.ConfigureOutbox().ConfigureInbox();
+
+        modelBuilder.Entity<IdempotencyRecord>(b =>
+        {
+            b.ToTable("idempotency_keys");
+            b.HasKey(r => new { r.UserId, r.Key });
+            b.Property(r => r.Key).HasMaxLength(100);
         });
     }
 }

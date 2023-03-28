@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using ShopStream.BuildingBlocks.Errors;
+using ShopStream.Contracts;
 using ShopStream.Orders.Clients;
 using ShopStream.Orders.Data;
 using ShopStream.Orders.Domain;
+using ShopStream.BuildingBlocks.Messaging;
 
 namespace ShopStream.Orders.Application;
 
@@ -27,6 +29,16 @@ public sealed class PlaceOrderService
 
     public async Task<PlaceOrderResult> PlaceAsync(Guid userId, string email, string bearerToken, PlaceOrderRequest request, string? idempotencyKey, CancellationToken ct)
     {
+        if (!string.IsNullOrWhiteSpace(idempotencyKey))
+        {
+            var existing = await _db.IdempotencyRecords.AsNoTracking().SingleOrDefaultAsync(r => r.UserId == userId && r.Key == idempotencyKey, ct);
+            if (existing is not null)
+            {
+                var replay = await LoadAsync(existing.OrderId, ct);
+                return new PlaceOrderResult(replay, true, Array.Empty<PriceAdjustmentDto>());
+            }
+        }
+
         var cart = await _cart.GetCartAsync(bearerToken, ct);
         if (cart is null || cart.Items.Count == 0)
         {
@@ -76,6 +88,16 @@ public sealed class PlaceOrderService
             request.PaymentMethod, items);
 
         _db.Orders.Add(order);
+        _db.Enqueue(Topics.OrderPlaced, order.Id, EventTypes.OrderPlaced, new OrderPlaced(
+            order.Id, order.UserId, order.Email,
+            order.Items.Select(i => new OrderLineDto(i.ProductId, i.Sku, i.Name, i.Quantity, i.UnitPrice)).ToList(),
+            order.Total, order.Currency, order.PaymentMethod));
+
+        if (!string.IsNullOrWhiteSpace(idempotencyKey))
+        {
+            _db.IdempotencyRecords.Add(new IdempotencyRecord(userId, idempotencyKey, order.Id));
+        }
+
         await _db.SaveChangesAsync(ct);
         _logger.LogInformation("Placed order {OrderNumber} ({OrderId}) total {Total}", order.Number, order.Id, order.Total);
 
@@ -106,6 +128,7 @@ public sealed class PlaceOrderService
 
         var reason = isAdmin && order.UserId != userId ? "Cancelled by an administrator" : "Cancelled by customer";
         order.Cancel(reason);
+        _db.Enqueue(Topics.OrderCancelled, order.Id, EventTypes.OrderCancelled, new OrderCancelled(order.Id, order.UserId, order.Email, reason));
         await _db.SaveChangesAsync(ct);
         return order;
     }
