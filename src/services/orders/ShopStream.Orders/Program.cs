@@ -9,6 +9,7 @@ using ShopStream.Orders.Application;
 using ShopStream.Orders.Clients;
 using ShopStream.Orders.Data;
 using ShopStream.Orders.Endpoints;
+using ShopStream.Orders.Messaging;
 using ShopStream.Protos.Catalog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -21,7 +22,9 @@ builder.Services.AddShopStreamJwt(builder.Configuration);
 builder.Services.AddShopStreamKafka(builder.Configuration);
 
 builder.Services.AddScoped<PlaceOrderService>();
+builder.Services.AddScoped<OrderSagaHandler>();
 builder.Services.AddOutboxRelay<OrdersDbContext>(builder.Configuration);
+builder.Services.AddHostedService<OrderEventsConsumer>();
 
 // all outgoing calls go through ResiliencePolicies
 var resilience = builder.Configuration.GetSection(ResilienceOptions.SectionName).Get<ResilienceOptions>() ?? new ResilienceOptions();
