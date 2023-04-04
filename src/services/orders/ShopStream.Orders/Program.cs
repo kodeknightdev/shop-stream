@@ -49,6 +49,7 @@ app.UseAuthorization();
 
 app.MapShopStreamHealth();
 app.MapOrderEndpoints();
+app.MapAdminEndpoints();
 
 if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("Database:MigrateOnStartup"))
 {
