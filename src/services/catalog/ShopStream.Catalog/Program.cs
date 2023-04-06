@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using ShopStream.BuildingBlocks;
 using ShopStream.BuildingBlocks.Auth;
 using ShopStream.BuildingBlocks.Health;
+using ShopStream.BuildingBlocks.Kafka;
 using ShopStream.Catalog.Data;
 using ShopStream.Catalog.Endpoints;
 using ShopStream.Catalog.Grpc;
@@ -13,6 +14,7 @@ builder.AddServiceDefaults("catalog", typeof(UpsertProductRequestValidator));
 builder.Services.AddDbContext<CatalogDbContext>(o => o.UseNpgsql(builder.Configuration.GetConnectionString("CatalogDb")));
 builder.Services.AddHealthChecks().AddDbContextCheck<CatalogDbContext>("postgres", tags: new[] { HealthEndpoints.ReadyTag });
 builder.Services.AddShopStreamJwt(builder.Configuration);
+builder.Services.AddShopStreamKafka(builder.Configuration);
 builder.Services.AddGrpc(o => o.EnableDetailedErrors = builder.Environment.IsDevelopment());
 builder.Services.AddGrpcReflection();
 

@@ -3,9 +3,11 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ShopStream.BuildingBlocks.Auth;
 using ShopStream.BuildingBlocks.Errors;
+using ShopStream.BuildingBlocks.Kafka;
 using ShopStream.BuildingBlocks.Validation;
 using ShopStream.Catalog.Data;
 using ShopStream.Catalog.Domain;
+using ShopStream.Contracts;
 
 namespace ShopStream.Catalog.Endpoints;
 
@@ -98,7 +100,8 @@ public static partial class ProductEndpoints
         return Results.Created($"/api/products/{product.Id}", ToDetail(product));
     }
 
-    private static async Task<IResult> Update(Guid id, UpsertProductRequest request, CatalogDbContext db, CancellationToken ct)
+    private static async Task<IResult> Update(Guid id, UpsertProductRequest request, CatalogDbContext db, IEventPublisher publisher,
+        ILoggerFactory loggers, CancellationToken ct)
     {
         var product = await db.Products.SingleOrDefaultAsync(p => p.Id == id, ct) ?? throw new NotFoundException($"Product {id} not found.");
         await EnsureCategoryExists(db, request.CategoryId, ct);
@@ -108,9 +111,23 @@ public static partial class ProductEndpoints
         }
 
         var slug = product.Name == request.Name ? product.Slug : await UniqueSlug(db, Slugify(request.Name), id, ct);
-        product.Update(request.CategoryId, request.Name, slug, request.Description, request.Price, request.ImageUrl,
+        var oldPrice = product.Update(request.CategoryId, request.Name, slug, request.Description, request.Price, request.ImageUrl,
             request.Attributes ?? new Dictionary<string, string>(), request.IsActive);
         await db.SaveChangesAsync(ct);
+
+        if (oldPrice is not null)
+        {
+            try
+            {
+                await publisher.PublishAsync(Topics.ProductPriceChanged, product.Id.ToString(), EventTypes.ProductPriceChanged,
+                    new ProductPriceChanged(product.Id, product.Sku, oldPrice.Value, product.Price), ct);
+            }
+            catch (Exception ex)
+            {
+                // not fatal, checkout re-checks prices anyway
+                loggers.CreateLogger("Catalog").LogWarning(ex, "Could not publish price change for {ProductId}", product.Id);
+            }
+        }
 
         await db.Entry(product).Reference(p => p.Category).LoadAsync(ct);
         return Results.Ok(ToDetail(product));
