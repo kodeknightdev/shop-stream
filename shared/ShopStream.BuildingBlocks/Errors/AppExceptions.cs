@@ -31,3 +31,8 @@ public sealed class BadRequestException : AppException
 {
     public BadRequestException(string message) : base(message, 400, "Bad request") { }
 }
+
+public sealed class ServiceUnavailableException : AppException
+{
+    public ServiceUnavailableException(string message) : base(message, 503, "Dependency unavailable") { }
+}

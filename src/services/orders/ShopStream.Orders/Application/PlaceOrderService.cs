@@ -39,7 +39,17 @@ public sealed class PlaceOrderService
             }
         }
 
-        var cart = await _cart.GetCartAsync(bearerToken, ct);
+        Cart? cart;
+        try
+        {
+            cart = await _cart.GetCartAsync(bearerToken, ct);
+        }
+        catch (Exception ex) when (ResiliencePolicies.IsDependencyFailure(ex))
+        {
+            _logger.LogError(ex, "Cart service call failed");
+            throw new ServiceUnavailableException("The cart service is unavailable right now. Please try again in a moment.");
+        }
+
         if (cart is null || cart.Items.Count == 0)
         {
             throw new BadRequestException("Your cart is empty.");
@@ -58,7 +68,7 @@ public sealed class PlaceOrderService
         catch (Exception ex) when (ResiliencePolicies.IsDependencyFailure(ex))
         {
             _logger.LogError(ex, "Catalog gRPC call failed: {Reason}", ex.Message);
-            throw new ConflictException("Prices could not be confirmed right now. Please try again.");
+            throw new ServiceUnavailableException("The catalog is unavailable right now. Please try again in a moment.");
         }
 
         var unavailable = cart.Items.Where(i => !products.TryGetValue(i.ProductId, out var p) || !p.IsActive).Select(i => i.Name).ToList();
