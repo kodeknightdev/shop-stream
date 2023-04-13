@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,34 +22,58 @@ public static class ProblemDetailsExtensions
 
     public static IApplicationBuilder UseShopStreamExceptionHandler(this IApplicationBuilder app)
     {
-        app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
-        {
-            var exception = context.Features.Get<IExceptionHandlerFeature>()?.Error;
-            var env = context.RequestServices.GetRequiredService<IHostEnvironment>();
-            var logger = context.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("ShopStream.Errors");
+        app.UseMiddleware<ProblemDetailsMiddleware>();
+        app.UseStatusCodePages();
+        return app;
+    }
+}
 
+internal sealed class ProblemDetailsMiddleware
+{
+    private readonly RequestDelegate _next;
+    private readonly ILogger<ProblemDetailsMiddleware> _logger;
+    private readonly IHostEnvironment _env;
+
+    public ProblemDetailsMiddleware(RequestDelegate next, ILogger<ProblemDetailsMiddleware> logger, IHostEnvironment env)
+    {
+        _next = next;
+        _logger = logger;
+        _env = env;
+    }
+
+    public async Task InvokeAsync(HttpContext context, IProblemDetailsService problems)
+    {
+        try
+        {
+            await _next(context);
+        }
+        catch (Exception exception) when (!context.Response.HasStarted && exception is not OperationCanceledException)
+        {
             var problem = exception switch
             {
                 AppException app => new ProblemDetails { Status = app.StatusCode, Title = app.Title, Detail = app.Message },
                 BadHttpRequestException bad => new ProblemDetails { Status = bad.StatusCode, Title = "Bad request", Detail = bad.Message },
+                UnauthorizedAccessException => new ProblemDetails { Status = StatusCodes.Status401Unauthorized, Title = "Unauthorized" },
                 _ => new ProblemDetails
                 {
                     Status = StatusCodes.Status500InternalServerError,
                     Title = "An unexpected error occurred",
-                    Detail = env.IsDevelopment() ? exception?.Message : null
+                    Detail = _env.IsDevelopment() ? exception.Message : null
                 }
             };
 
             if (problem.Status >= 500)
             {
-                logger.LogError(exception, "Unhandled exception for {Path}", context.Request.Path);
+                _logger.LogError(exception, "Unhandled exception for {Method} {Path}", context.Request.Method, context.Request.Path);
+            }
+            else
+            {
+                _logger.LogInformation("{Method} {Path} -> {Status}: {Detail}", context.Request.Method, context.Request.Path, problem.Status, problem.Detail);
             }
 
+            context.Response.Clear();
             context.Response.StatusCode = problem.Status ?? 500;
-            var writer = context.RequestServices.GetRequiredService<IProblemDetailsService>();
-            await writer.WriteAsync(new ProblemDetailsContext { HttpContext = context, ProblemDetails = problem });
-        }));
-        app.UseStatusCodePages();
-        return app;
+            await problems.WriteAsync(new ProblemDetailsContext { HttpContext = context, ProblemDetails = problem });
+        }
     }
 }
