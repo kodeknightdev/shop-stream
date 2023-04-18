@@ -3,6 +3,7 @@ using ShopStream.BuildingBlocks;
 using ShopStream.BuildingBlocks.Auth;
 using ShopStream.BuildingBlocks.Health;
 using ShopStream.BuildingBlocks.Kafka;
+using ShopStream.Catalog.Caching;
 using ShopStream.Catalog.Data;
 using ShopStream.Catalog.Endpoints;
 using ShopStream.Catalog.Grpc;
@@ -15,6 +16,7 @@ builder.Services.AddDbContext<CatalogDbContext>(o => o.UseNpgsql(builder.Configu
 builder.Services.AddHealthChecks().AddDbContextCheck<CatalogDbContext>("postgres", tags: new[] { HealthEndpoints.ReadyTag });
 builder.Services.AddShopStreamJwt(builder.Configuration);
 builder.Services.AddShopStreamKafka(builder.Configuration);
+builder.Services.AddProductCache(builder.Configuration);
 builder.Services.AddGrpc(o => o.EnableDetailedErrors = builder.Environment.IsDevelopment());
 builder.Services.AddGrpcReflection();
 
