@@ -59,6 +59,11 @@ public static class PaymentProviderRegistration
             return services;
         }
 
+        if (!key.StartsWith("sk_test_", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Only Stripe test-mode secret keys (sk_test_...) are allowed in shop-stream.");
+        }
+
         logger.LogInformation("Using Stripe in test mode");
         services.AddSingleton<IStripeClient>(_ => new StripeClient(key));
         services.AddSingleton<IPaymentProvider, StripePaymentProvider>();
