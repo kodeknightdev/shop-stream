@@ -19,6 +19,8 @@ public static class OrderEndpoints
             .Produces<OrderDetailDto>(201).Produces<OrderDetailDto>().ProducesProblem(400).ProducesProblem(409).ProducesProblem(503);
         group.MapGet("", MyOrders).Produces<object>();
         group.MapGet("/{id:guid}", GetOrder).Produces<OrderDetailDto>().ProducesProblem(404);
+        group.MapGet("/{id:guid}/details", GetOrderDetails).Produces<OrderDetailsView>().ProducesProblem(404)
+            .WithSummary("API composition: order + payment + current product snapshots");
         group.MapPost("/{id:guid}/cancel", Cancel).Produces<OrderDetailDto>().ProducesProblem(409);
 
         return group;
@@ -66,6 +68,9 @@ public static class OrderEndpoints
 
         return Results.Ok(order.ToDetail());
     }
+
+    private static async Task<IResult> GetOrderDetails(Guid id, ClaimsPrincipal user, HttpContext http, OrderDetailsComposer composer, CancellationToken ct) =>
+        Results.Ok(await composer.ComposeAsync(id, user.GetUserId(), user.IsAdmin(), BearerToken(http), ct));
 
     private static async Task<IResult> Cancel(Guid id, ClaimsPrincipal user, PlaceOrderService service, CancellationToken ct)
     {

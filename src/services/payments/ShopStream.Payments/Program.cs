@@ -49,6 +49,11 @@ if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("Databas
     {
         await db.Database.EnsureCreatedAsync();
     }
+
+    if (app.Environment.IsDevelopment())
+    {
+        await DemoPaymentSeeder.SeedAsync(db, app.Logger);
+    }
 }
 
 app.Run();

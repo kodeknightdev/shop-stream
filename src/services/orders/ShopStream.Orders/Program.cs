@@ -23,6 +23,7 @@ builder.Services.AddShopStreamKafka(builder.Configuration);
 
 builder.Services.AddScoped<PlaceOrderService>();
 builder.Services.AddScoped<OrderSagaHandler>();
+builder.Services.AddScoped<OrderDetailsComposer>();
 builder.Services.AddOutboxRelay<OrdersDbContext>(builder.Configuration);
 builder.Services.AddHostedService<OrderEventsConsumer>();
 
@@ -40,6 +41,11 @@ builder.Services
     .AddHttpClient<ICartClient, HttpCartClient>(c => c.BaseAddress = new Uri(builder.Configuration["Services:Cart"]!))
     .AddHttpMessageHandler<CorrelationIdDelegatingHandler>()
     .AddPolicyHandler(ResiliencePolicies.ForHttp("cart", resilience, resilienceLogs.CreateLogger("Resilience.Cart")));
+
+builder.Services
+    .AddHttpClient<IPaymentsClient, HttpPaymentsClient>(c => c.BaseAddress = new Uri(builder.Configuration["Services:Payments"]!))
+    .AddHttpMessageHandler<CorrelationIdDelegatingHandler>()
+    .AddPolicyHandler(ResiliencePolicies.ForHttp("payments", resilience, resilienceLogs.CreateLogger("Resilience.Payments")));
 
 var app = builder.Build();
 
@@ -62,6 +68,11 @@ if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("Databas
     else
     {
         await db.Database.EnsureCreatedAsync();
+    }
+
+    if (app.Environment.IsDevelopment())
+    {
+        await DemoOrderSeeder.SeedAsync(db, app.Logger);
     }
 }
 
