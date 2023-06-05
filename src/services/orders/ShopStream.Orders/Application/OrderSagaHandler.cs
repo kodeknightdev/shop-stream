@@ -54,7 +54,12 @@ public sealed class OrderSagaHandler
     public Task HandlePaymentFailedAsync(Guid eventId, PaymentFailed e, CancellationToken ct) =>
         WithOrderAsync(eventId, EventTypes.PaymentFailed, e.OrderId, order =>
         {
-            order.Cancel($"Payment failed: {e.Reason}");
+            var reason = $"Payment failed: {e.Reason}";
+            if (order.Cancel(reason))
+            {
+                // inventory releases the reservation on this
+                _db.Enqueue(Topics.OrderCancelled, order.Id, EventTypes.OrderCancelled, new OrderCancelled(order.Id, order.UserId, order.Email, reason));
+            }
         }, ct);
 
     private async Task WithOrderAsync(Guid eventId, string eventType, Guid orderId, Action<Order> apply, CancellationToken ct)
