@@ -9,7 +9,7 @@ from .service import InventoryService
 
 log = logging.getLogger(__name__)
 
-TOPICS = [events.ORDER_PLACED, events.PAYMENT_SUCCEEDED]
+TOPICS = [events.ORDER_PLACED, events.ORDER_CANCELLED, events.PAYMENT_SUCCEEDED]
 
 
 def make_handler(publisher: Publisher, cache: InventoryCache | None, reservation_ttl):
@@ -24,6 +24,8 @@ def make_handler(publisher: Publisher, cache: InventoryCache | None, reservation
             payload = envelope.payload
             if topic == events.ORDER_PLACED:
                 service.reserve_for_order(payload)
+            elif topic == events.ORDER_CANCELLED:
+                service.release_for_order(str(payload["orderId"]), payload.get("reason", "Order cancelled"))
             elif topic == events.PAYMENT_SUCCEEDED:
                 service.commit_for_order(str(payload["orderId"]))
             else:

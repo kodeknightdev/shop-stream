@@ -43,13 +43,16 @@ def test_handler_skips_duplicate_event_ids_via_the_inbox_table(session, publishe
     assert row is not None and row.event_type == "OrderPlaced"
 
 
-def test_rejected_events_are_recorded_too(session, publisher, product_ids):
+def test_rejected_and_no_op_events_are_recorded_too(session, publisher, product_ids):
     handler = make_handler(publisher, None, timedelta(minutes=15))
     rejected = envelope(order_placed(str(uuid.uuid4()), (product_ids[2], 1)))  # sold out
+    unknown_cancel = envelope({"orderId": str(uuid.uuid4())}, "OrderCancelled")
 
     handler(events.ORDER_PLACED, rejected)
+    handler(events.ORDER_CANCELLED, unknown_cancel)
 
     assert session.get(ProcessedEvent, rejected.event_id) is not None
+    assert session.get(ProcessedEvent, unknown_cancel.event_id) is not None
     assert len(publisher.of_type("StockRejected")) == 1
 
 
@@ -69,3 +72,18 @@ def test_retry_topic_helpers():
     assert retry.source_topic("orders.order-cancelled.retry") == "orders.order-cancelled"
     assert not retry.is_retry_topic("orders.order-cancelled")
     assert retry.backoff_seconds(10) == retry.MAX_BACKOFF_SECONDS
+
+
+def test_cancel_then_payment_flow(session, publisher, cache, product_ids):
+    handler = make_handler(publisher, cache, timedelta(minutes=15))
+    order_id = str(uuid.uuid4())
+    handler(events.ORDER_PLACED, envelope(order_placed(order_id, (product_ids[0], 2))))
+    handler(events.ORDER_CANCELLED, envelope({"orderId": order_id, "reason": "Payment failed"}, "OrderCancelled"))
+
+    session.expire_all()
+    assert session.get(StockItem, product_ids[0]).reserved == 0
+
+    # a late payment event must not touch the released reservation
+    handler(events.PAYMENT_SUCCEEDED, envelope({"orderId": order_id}, "PaymentSucceeded"))
+    session.expire_all()
+    assert session.get(StockItem, product_ids[0]).on_hand == 10
