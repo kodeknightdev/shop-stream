@@ -21,12 +21,24 @@ public sealed class OrderSagaHandler
     public Task HandleStockReservedAsync(Guid eventId, StockReserved e, CancellationToken ct) =>
         WithOrderAsync(eventId, EventTypes.StockReserved, e.OrderId, order =>
         {
+            if (order.Status != OrderStatus.Pending && order.Status != OrderStatus.InventoryReserved)
+            {
+                _logger.LogWarning("Ignoring StockReserved for order {OrderId} in status {Status}", order.Id, order.Status);
+                return;
+            }
+
             order.MarkInventoryReserved(e.ReservationId);
         }, ct);
 
     public Task HandleStockRejectedAsync(Guid eventId, StockRejected e, CancellationToken ct) =>
         WithOrderAsync(eventId, EventTypes.StockRejected, e.OrderId, order =>
         {
+            if (!Order.CanTransition(order.Status, OrderStatus.Cancelled))
+            {
+                _logger.LogWarning("Ignoring StockRejected for order {OrderId} in status {Status}", order.Id, order.Status);
+                return;
+            }
+
             var reason = $"Inventory: {e.Reason}";
             if (order.Cancel(reason))
             {
@@ -37,6 +49,13 @@ public sealed class OrderSagaHandler
     public Task HandlePaymentSucceededAsync(Guid eventId, PaymentSucceeded e, CancellationToken ct) =>
         WithOrderAsync(eventId, EventTypes.PaymentSucceeded, e.OrderId, order =>
         {
+            if (order.Status == OrderStatus.Cancelled)
+            {
+                // paid after it was cancelled - needs a manual refund
+                _logger.LogError("Payment {PaymentId} succeeded for cancelled order {OrderId}; manual refund required", e.PaymentId, order.Id);
+                return;
+            }
+
             if (order.Status == OrderStatus.Pending)
             {
                 // stock-reserved not handled yet, let the retry topic bring it back
@@ -54,6 +73,12 @@ public sealed class OrderSagaHandler
     public Task HandlePaymentFailedAsync(Guid eventId, PaymentFailed e, CancellationToken ct) =>
         WithOrderAsync(eventId, EventTypes.PaymentFailed, e.OrderId, order =>
         {
+            if (!Order.CanTransition(order.Status, OrderStatus.Cancelled))
+            {
+                _logger.LogWarning("Ignoring PaymentFailed for order {OrderId} in status {Status}", order.Id, order.Status);
+                return;
+            }
+
             var reason = $"Payment failed: {e.Reason}";
             if (order.Cancel(reason))
             {
