@@ -146,6 +146,7 @@ class InventoryService:
         self.session.commit()
         for reservation in expired:
             self._invalidate(*[i.product_id for i in reservation.items])
+            self._publish_rejected(reservation.order_id, "Reservation expired before payment completed")
         return len(expired)
 
     # --- admin -------------------------------------------------------------------

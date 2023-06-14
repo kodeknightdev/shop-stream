@@ -87,6 +87,7 @@ def test_expired_reservations_are_released_and_rejected(session, publisher, prod
     assert session.get(StockItem, product_ids[0]).reserved == 0
     reservation = session.query(Reservation).filter_by(order_id=order_id).one()
     assert reservation.status == ReservationStatus.EXPIRED
+    assert "expired" in publisher.of_type("StockRejected")[-1][3]["reason"]
 
 
 def test_adjust_cannot_drop_below_reserved(session, publisher, product_ids):
