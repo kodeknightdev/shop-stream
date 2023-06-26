@@ -1,0 +1,35 @@
+{
+  "name": "@shop-stream/cart",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Per-user shopping carts stored in Redis",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=18.12 <19"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "jest --runInBand",
+    "lint": "node --check src/*.js"
+  },
+  "dependencies": {
+    "cockatiel": "3.1.1",
+    "express": "4.18.2",
+    "ioredis": "5.3.2",
+    "jsonwebtoken": "9.0.0",
+    "kafkajs": "2.2.4",
+    "pino": "8.14.1",
+    "pino-http": "8.3.3",
+    "swagger-ui-express": "4.6.3",
+    "zod": "3.21.4"
+  },
+  "devDependencies": {
+    "ioredis-mock": "8.7.0",
+    "jest": "29.5.0",
+    "supertest": "6.3.3"
+  },
+  "jest": {
+    "testEnvironment": "node"
+  }
+}
