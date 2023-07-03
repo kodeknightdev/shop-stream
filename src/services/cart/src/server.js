@@ -6,6 +6,7 @@ const logger = require('./logger');
 const { createApp } = require('./app');
 const { createCartStore } = require('./cartStore');
 const { createCatalogClient } = require('./catalogClient');
+const { startPriceConsumer } = require('./kafka');
 const { createInbox } = require('./inbox');
 
 async function main() {
@@ -15,11 +16,19 @@ async function main() {
   const store = createCartStore(redis, config.cartTtlSeconds);
   const catalog = createCatalogClient(config.catalogUrl);
 
+  let kafka = null;
+  if (config.kafka.enabled) {
+    startPriceConsumer({ ...config.kafka, store, inbox: createInbox(redis) })
+      .then((handle) => { kafka = handle; logger.info('price consumer started'); })
+      .catch((err) => logger.error({ err }, 'price consumer failed to start'));
+  }
+
   const app = createApp({
     store,
     catalog,
     redis,
     jwtConfig: config.jwt,
+    kafkaStatus: () => !config.kafka.enabled || Boolean(kafka?.isConnected()),
   });
 
   const server = app.listen(config.port, () => logger.info(`cart listening on ${config.port}`));
@@ -27,6 +36,7 @@ async function main() {
   const shutdown = async () => {
     logger.info('shutting down');
     server.close();
+    await kafka?.stop().catch(() => {});
     redis.disconnect();
     process.exit(0);
   };
