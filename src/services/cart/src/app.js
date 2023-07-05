@@ -2,8 +2,10 @@
 
 const express = require('express');
 const pinoHttp = require('pino-http');
+const swaggerUi = require('swagger-ui-express');
 
 const baseLogger = require('./logger');
+const openapi = require('./openapi');
 const { correlationMiddleware } = require('./correlation');
 const { requireUser } = require('./auth');
 const { schemas, validate, MAX_QUANTITY } = require('./validation');
@@ -30,6 +32,9 @@ function createApp({ store, catalog, redis, jwtConfig, kafkaStatus = () => true,
     const healthy = Object.values(checks).every((v) => v === 'Healthy');
     res.status(healthy ? 200 : 503).json({ status: healthy ? 'Healthy' : 'Unhealthy', checks });
   }));
+
+  app.get('/api-docs/openapi.json', (req, res) => res.json(openapi));
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(openapi));
 
   const cart = express.Router();
   cart.use(requireUser(jwtConfig));
