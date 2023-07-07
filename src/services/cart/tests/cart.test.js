@@ -43,6 +43,12 @@ describe('cart API', () => {
     expect(res.body.itemCount).toBe(5);
   });
 
+  test('caps quantity at 20', async () => {
+    await request(ctx.app).post('/api/cart/items').set(auth).send({ productId: P1, quantity: 15 });
+    const res = await request(ctx.app).post('/api/cart/items').set(auth).send({ productId: P1, quantity: 10 });
+    expect(res.body.items[0].quantity).toBe(20);
+  });
+
   test('validates input', async () => {
     const res = await request(ctx.app).post('/api/cart/items').set(auth).send({ productId: 'nope', quantity: 0 });
     expect(res.status).toBe(400);

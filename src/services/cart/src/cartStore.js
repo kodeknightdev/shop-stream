@@ -44,7 +44,7 @@ function createCartStore(redis, ttlSeconds) {
       const cart = await load(userId);
       const existing = cart.items.find((i) => i.productId === product.id);
       if (existing) {
-        existing.quantity += quantity;
+        existing.quantity = Math.min(maxQuantity, existing.quantity + quantity);
         existing.unitPrice = product.price;
         existing.priceStale = false;
         delete existing.latestPrice;
