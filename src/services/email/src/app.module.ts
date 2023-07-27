@@ -1,8 +1,10 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
+import { AdminGuard } from './common/admin.guard';
 import { CorrelationIdMiddleware } from './common/correlation';
 import { ProblemDetailsFilter } from './common/problem-details.filter';
 import { APP_CONFIG, config } from './config';
+import { EmailsController } from './emails/emails.controller';
 import { HealthController } from './health/health.controller';
 import { InboxService, inboxRedisProvider } from './inbox/inbox.service';
 import { KafkaConsumerService } from './kafka/kafka-consumer.service';
@@ -11,7 +13,7 @@ import { TemplatesService } from './mail/templates.service';
 import { NotificationsService } from './notifications/notifications.service';
 
 @Module({
-  controllers: [HealthController],
+  controllers: [EmailsController, HealthController],
   providers: [
     { provide: APP_CONFIG, useValue: config },
     { provide: APP_FILTER, useClass: ProblemDetailsFilter },
@@ -22,6 +24,7 @@ import { NotificationsService } from './notifications/notifications.service';
     TemplatesService,
     NotificationsService,
     KafkaConsumerService,
+    AdminGuard,
   ],
 })
 export class AppModule implements NestModule {
