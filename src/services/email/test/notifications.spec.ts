@@ -84,6 +84,13 @@ describe('NotificationsService', () => {
     expect(sendMail).not.toHaveBeenCalled();
   });
 
+  it('records failures so they are retried, not marked handled', async () => {
+    sendMail.mockRejectedValueOnce(new Error('SMTP down'));
+    const e = envelope({ orderId, email: 'casey@example.com', total: 1 }, 'evt-3');
+    await expect(service.handle(TOPICS.orderConfirmed, e)).rejects.toThrow('SMTP down');
+    expect(mailer.recent()[0]).toMatchObject({ status: 'failed', error: 'SMTP down' });
+    await expect(service.handle(TOPICS.orderConfirmed, e)).resolves.toBe(true);
+  });
 });
 
 describe('parseEnvelope', () => {

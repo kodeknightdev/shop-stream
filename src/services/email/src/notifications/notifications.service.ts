@@ -64,9 +64,10 @@ export class NotificationsService {
       return false;
     }
 
-    await this.inbox.record(envelope.eventId, envelope.eventType);
     const html = this.templates.render(plan.template, plan.subject, plan.data);
     await this.mailer.send(plan.to, plan.subject, html, plan.template, String(envelope.payload.orderId ?? ''));
+    // only once the send worked, otherwise the retry would skip it
+    await this.inbox.record(envelope.eventId, envelope.eventType);
     return true;
   }
 }
