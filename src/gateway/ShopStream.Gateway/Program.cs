@@ -3,12 +3,14 @@ using ShopStream.BuildingBlocks.Correlation;
 using ShopStream.BuildingBlocks.Errors;
 using ShopStream.BuildingBlocks.Health;
 using ShopStream.BuildingBlocks.Logging;
+using ShopStream.Gateway;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddShopStreamLogging("gateway");
 builder.Services.AddShopStreamProblemDetails();
 builder.Services.AddShopStreamJwt(builder.Configuration);
+builder.Services.AddGatewayRateLimiting(builder.Configuration);
 builder.Services.AddReverseProxy().LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
 builder.Services.AddHealthChecks();
 
@@ -24,6 +26,7 @@ var app = builder.Build();
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseShopStreamExceptionHandler();
 app.UseCors();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 
