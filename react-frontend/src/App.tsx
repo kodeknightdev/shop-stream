@@ -3,6 +3,7 @@ import { Layout } from './components/Layout';
 import { CatalogPage } from './pages/CatalogPage';
 import { LoginPage } from './pages/LoginPage';
 import { NotFoundPage } from './pages/NotFoundPage';
+import { ProductPage } from './pages/ProductPage';
 import { RegisterPage } from './pages/RegisterPage';
 
 export function App() {
@@ -10,6 +11,7 @@ export function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route index element={<CatalogPage />} />
+        <Route path="products/:id" element={<ProductPage />} />
         <Route path="login" element={<LoginPage />} />
         <Route path="register" element={<RegisterPage />} />
         <Route path="*" element={<NotFoundPage />} />
