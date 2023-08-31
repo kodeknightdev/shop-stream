@@ -1,5 +1,7 @@
 import { Route, Routes } from 'react-router-dom';
+import { RequireAuth } from './auth/RequireAuth';
 import { Layout } from './components/Layout';
+import { CartPage } from './pages/CartPage';
 import { CatalogPage } from './pages/CatalogPage';
 import { LoginPage } from './pages/LoginPage';
 import { NotFoundPage } from './pages/NotFoundPage';
@@ -14,6 +16,7 @@ export function App() {
         <Route path="products/:id" element={<ProductPage />} />
         <Route path="login" element={<LoginPage />} />
         <Route path="register" element={<RegisterPage />} />
+        <Route path="cart" element={<RequireAuth><CartPage /></RequireAuth>} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
