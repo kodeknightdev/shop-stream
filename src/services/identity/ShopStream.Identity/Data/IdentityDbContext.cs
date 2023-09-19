@@ -28,6 +28,7 @@ public sealed class IdentityDbContext : DbContext
         {
             b.ToTable("refresh_tokens");
             b.HasKey(t => t.Id);
+            b.Property(t => t.Id).ValueGeneratedNever();
             b.Property(t => t.TokenHash).HasMaxLength(64).IsRequired();
             b.HasIndex(t => t.TokenHash).IsUnique();
             b.Property(t => t.ReplacedByHash).HasMaxLength(64);

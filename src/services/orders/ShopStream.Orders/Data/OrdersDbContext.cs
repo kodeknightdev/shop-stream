@@ -20,6 +20,7 @@ public sealed class OrdersDbContext : DbContext, IOutboxDbContext, IInboxDbConte
         {
             b.ToTable("orders");
             b.HasKey(o => o.Id);
+            b.Property(o => o.Id).ValueGeneratedNever();
             b.Property(o => o.Number).HasMaxLength(20).IsRequired();
             b.HasIndex(o => o.Number).IsUnique();
             b.Property(o => o.Email).HasMaxLength(256).IsRequired();
@@ -49,6 +50,8 @@ public sealed class OrdersDbContext : DbContext, IOutboxDbContext, IInboxDbConte
         {
             b.ToTable("order_items");
             b.HasKey(i => i.Id);
+            // ids come from the domain, otherwise EF treats new children as updates
+            b.Property(i => i.Id).ValueGeneratedNever();
             b.Property(i => i.Sku).HasMaxLength(32);
             b.Property(i => i.Name).HasMaxLength(200);
             b.Property(i => i.UnitPrice).HasPrecision(12, 2);
@@ -60,6 +63,7 @@ public sealed class OrdersDbContext : DbContext, IOutboxDbContext, IInboxDbConte
         {
             b.ToTable("order_status_history");
             b.HasKey(h => h.Id);
+            b.Property(h => h.Id).ValueGeneratedNever();
             b.Property(h => h.From).HasConversion<string>().HasMaxLength(32);
             b.Property(h => h.To).HasConversion<string>().HasMaxLength(32);
             b.Property(h => h.Note).HasMaxLength(500);
