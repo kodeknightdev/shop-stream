@@ -4,6 +4,7 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using ShopStream.Contracts;
 
@@ -17,22 +18,21 @@ public static class AuthPolicies
 
 public static class AuthExtensions
 {
-
     public static IServiceCollection AddShopStreamJwt(this IServiceCollection services, IConfiguration configuration)
     {
-        var settings = configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>() ?? new JwtSettings();
-        if (string.IsNullOrWhiteSpace(settings.SigningKey) || settings.SigningKey.Length < 32)
-        {
-            throw new InvalidOperationException("Jwt:SigningKey must be configured and at least 32 characters long.");
-        }
-
-        services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
+        services.AddOptions<JwtSettings>()
+            .Bind(configuration.GetSection(JwtSettings.SectionName))
+            .Validate(s => s.SigningKey.Length >= 32, "Jwt:SigningKey must be configured and at least 32 characters long.")
+            .ValidateOnStart();
         JwtSecurityTokenHandler.DefaultInboundClaimTypeMap.Clear();
 
-        services
-            .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-            .AddJwtBearer(options =>
+        services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
+
+        // configured lazily so test hosts can override Jwt settings
+        services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
+            .Configure<IOptions<JwtSettings>>((options, jwt) =>
             {
+                var settings = jwt.Value;
                 options.MapInboundClaims = false;
                 options.TokenValidationParameters = new TokenValidationParameters
                 {

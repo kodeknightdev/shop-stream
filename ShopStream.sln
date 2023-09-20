@@ -29,6 +29,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShopStream.TestSupport", "t
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShopStream.Orders.UnitTests", "tests\ShopStream.Orders.UnitTests\ShopStream.Orders.UnitTests.csproj", "{3B377453-D954-4227-8AB8-67E9FBDDB684}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShopStream.Orders.IntegrationTests", "tests\ShopStream.Orders.IntegrationTests\ShopStream.Orders.IntegrationTests.csproj", "{72B5CDCF-9959-42C5-9687-41E3623C5868}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -74,6 +76,10 @@ Global
 		{3B377453-D954-4227-8AB8-67E9FBDDB684}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3B377453-D954-4227-8AB8-67E9FBDDB684}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{3B377453-D954-4227-8AB8-67E9FBDDB684}.Release|Any CPU.Build.0 = Release|Any CPU
+		{72B5CDCF-9959-42C5-9687-41E3623C5868}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{72B5CDCF-9959-42C5-9687-41E3623C5868}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{72B5CDCF-9959-42C5-9687-41E3623C5868}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{72B5CDCF-9959-42C5-9687-41E3623C5868}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{5B21BDF6-9CB3-454A-8CA2-5699FF0A633C} = {245E229E-290F-43D4-91DD-92EBD6F8929E}
@@ -85,5 +91,6 @@ Global
 		{68033AD3-18CC-430E-A048-9977064F5F6A} = {6DAAACC2-D136-449B-B629-93C7D2959DDC}
 		{F813B242-49F1-445E-B4EE-1071B40C71CD} = {9C5D72CE-47C3-4998-8E8C-2956D24DA3E9}
 		{3B377453-D954-4227-8AB8-67E9FBDDB684} = {9C5D72CE-47C3-4998-8E8C-2956D24DA3E9}
+		{72B5CDCF-9959-42C5-9687-41E3623C5868} = {9C5D72CE-47C3-4998-8E8C-2956D24DA3E9}
 	EndGlobalSection
 EndGlobal
