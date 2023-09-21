@@ -41,7 +41,7 @@ internal sealed class ProblemDetailsMiddleware
         _env = env;
     }
 
-    public async Task InvokeAsync(HttpContext context, IProblemDetailsService problems)
+    public async Task InvokeAsync(HttpContext context)
     {
         try
         {
@@ -71,9 +71,11 @@ internal sealed class ProblemDetailsMiddleware
                 _logger.LogInformation("{Method} {Path} -> {Status}: {Detail}", context.Request.Method, context.Request.Path, problem.Status, problem.Detail);
             }
 
+            // IProblemDetailsService writes nothing when there's no Accept header (.NET 7)
+            problem.Instance = context.Request.Path;
+            problem.Extensions["correlationId"] = CorrelationContext.CorrelationId ?? context.TraceIdentifier;
             context.Response.Clear();
-            context.Response.StatusCode = problem.Status ?? 500;
-            await problems.WriteAsync(new ProblemDetailsContext { HttpContext = context, ProblemDetails = problem });
+            await Results.Problem(problem).ExecuteAsync(context);
         }
     }
 }
