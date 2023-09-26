@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\services\identity\ShopStream.Identity\ShopStream.Identity.csproj" />
+    <ProjectReference Include="..\ShopStream.TestSupport\ShopStream.TestSupport.csproj" />
+  </ItemGroup>
+
+</Project>
