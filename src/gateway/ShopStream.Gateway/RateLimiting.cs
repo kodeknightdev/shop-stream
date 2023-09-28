@@ -8,11 +8,8 @@ public static class RateLimiting
     public const string PerIp = "per-ip";
     public const string Auth = "auth";
 
-    public static IServiceCollection AddGatewayRateLimiting(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddGatewayRateLimiting(this IServiceCollection services)
     {
-        var permits = configuration.GetValue("RateLimiting:PermitsPerWindow", 120);
-        var authPermits = configuration.GetValue("RateLimiting:AuthPermitsPerMinute", 10);
-
         return services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -31,20 +28,24 @@ public static class RateLimiting
             // per client IP
             options.AddPolicy(PerIp, ctx => RateLimitPartition.GetFixedWindowLimiter(ClientKey(ctx), _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = permits,
+                PermitLimit = Setting(ctx, "RateLimiting:PermitsPerWindow", 120),
                 Window = TimeSpan.FromSeconds(10),
                 QueueLimit = 0
             }));
 
             options.AddPolicy(Auth, ctx => RateLimitPartition.GetSlidingWindowLimiter(ClientKey(ctx), _ => new SlidingWindowRateLimiterOptions
             {
-                PermitLimit = authPermits,
+                PermitLimit = Setting(ctx, "RateLimiting:AuthPermitsPerMinute", 10),
                 Window = TimeSpan.FromMinutes(1),
                 SegmentsPerWindow = 6,
                 QueueLimit = 0
             }));
         });
     }
+
+    // read at request time so test overrides apply
+    private static int Setting(HttpContext ctx, string key, int fallback) =>
+        ctx.RequestServices.GetRequiredService<IConfiguration>().GetValue(key, fallback);
 
     private static string ClientKey(HttpContext ctx) =>
         ctx.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
