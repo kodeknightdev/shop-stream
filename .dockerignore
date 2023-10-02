@@ -1,0 +1,11 @@
+**/bin/
+**/obj/
+**/node_modules/
+**/dist/
+**/__pycache__/
+**/.pytest_cache/
+**/TestResults/
+.git/
+.env
+deploy/
+tests/
