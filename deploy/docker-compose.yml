@@ -1,0 +1,297 @@
+name: shop-stream
+
+# Development runs migrations and seeds the demo data
+x-dotnet-env: &dotnet-env
+  ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+  Database__MigrateOnStartup: "true"
+  Logging__Format: json
+  Jwt__SigningKey: ${JWT_SIGNING_KEY:-local-compose-signing-key-change-me-000000}
+  Kafka__BootstrapServers: kafka:9092
+
+x-depends-infra: &depends-infra
+  postgres:
+    condition: service_healthy
+  kafka-init:
+    condition: service_completed_successfully
+
+services:
+  # ---------------------------------------------------------------- infrastructure
+  postgres:
+    image: postgres:15.4-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-shopstream}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-shopstream}
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d inventory_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7.2.1-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  kafka:
+    image: ${KAFKA_IMAGE:-bitnami/kafka:3.5.1}
+    environment:
+      KAFKA_KRAFT_CLUSTER_ID: c2hvcC1zdHJlYW0tY2x1c3Rlcg
+      KAFKA_CFG_NODE_ID: "0"
+      KAFKA_CFG_PROCESS_ROLES: controller,broker
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 0@kafka:9093
+      KAFKA_CFG_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094
+      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CFG_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_CFG_MIN_INSYNC_REPLICAS: "1"
+      KAFKA_HEAP_OPTS: -Xmx512m -Xms256m
+    ports:
+      - "9094:9094"
+    volumes:
+      - kafka-data:/bitnami/kafka
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 20s
+
+  kafka-init:
+    image: ${KAFKA_IMAGE:-bitnami/kafka:3.5.1}
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "/scripts/create-topics.sh"]
+    environment:
+      KAFKA_BOOTSTRAP: kafka:9092
+    volumes:
+      - ./kafka/create-topics.sh:/scripts/create-topics.sh:ro
+    restart: "no"
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:v0.7.1
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_CLUSTERS_0_NAME: shop-stream
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      DYNAMIC_CONFIG_ENABLED: "false"
+    ports:
+      - "8085:8080"
+
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    ports:
+      - "8025:8025"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8025/api/v2/messages?limit=1 >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  # ---------------------------------------------------------------- services
+  identity:
+    build:
+      context: ..
+      dockerfile: src/services/identity/Dockerfile
+    image: shopstream/identity:${IMAGE_TAG:-local}
+    environment:
+      <<: *dotnet-env
+      SEED_DEMO_PASSWORD: ${SEED_DEMO_PASSWORD:-Demo@12345}
+      ConnectionStrings__IdentityDb: Host=postgres;Database=identity_db;Username=${POSTGRES_USER:-shopstream};Password=${POSTGRES_PASSWORD:-shopstream}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  catalog:
+    build:
+      context: ..
+      dockerfile: src/services/catalog/Dockerfile
+    image: shopstream/catalog:${IMAGE_TAG:-local}
+    environment:
+      <<: *dotnet-env
+      ConnectionStrings__CatalogDb: Host=postgres;Database=catalog_db;Username=${POSTGRES_USER:-shopstream};Password=${POSTGRES_PASSWORD:-shopstream}
+      ConnectionStrings__Redis: redis:6379
+    depends_on:
+      <<: *depends-infra
+      redis:
+        condition: service_healthy
+
+  orders:
+    build:
+      context: ..
+      dockerfile: src/services/orders/Dockerfile
+    image: shopstream/orders:${IMAGE_TAG:-local}
+    environment:
+      <<: *dotnet-env
+      ConnectionStrings__OrdersDb: Host=postgres;Database=orders_db;Username=${POSTGRES_USER:-shopstream};Password=${POSTGRES_PASSWORD:-shopstream}
+      Services__CatalogGrpc: http://catalog:8081
+      Services__Cart: http://cart:3000
+      Services__Payments: http://payments:8080
+    depends_on:
+      <<: *depends-infra
+      catalog:
+        condition: service_healthy
+      cart:
+        condition: service_healthy
+
+  payments:
+    build:
+      context: ..
+      dockerfile: src/services/payments/Dockerfile
+    image: shopstream/payments:${IMAGE_TAG:-local}
+    environment:
+      <<: *dotnet-env
+      ConnectionStrings__PaymentsDb: Host=postgres;Database=payments_db;Username=${POSTGRES_USER:-shopstream};Password=${POSTGRES_PASSWORD:-shopstream}
+      Stripe__SecretKey: ${STRIPE_SECRET_KEY:-}
+    depends_on: *depends-infra
+
+  inventory:
+    build:
+      context: ../src/services/inventory
+    image: shopstream/inventory:${IMAGE_TAG:-local}
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-shopstream}:${POSTGRES_PASSWORD:-shopstream}@postgres:5432/inventory_db
+      REDIS_URL: redis://redis:6379/0
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:-local-compose-signing-key-change-me-000000}
+      RESERVATION_TTL_SECONDS: ${RESERVATION_TTL_SECONDS:-900}
+    depends_on:
+      <<: *depends-infra
+      redis:
+        condition: service_healthy
+
+  cart:
+    build:
+      context: ../src/services/cart
+    image: shopstream/cart:${IMAGE_TAG:-local}
+    environment:
+      PORT: "3000"
+      REDIS_URL: redis://redis:6379/1
+      CATALOG_URL: http://catalog:8080
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:-local-compose-signing-key-change-me-000000}
+    depends_on:
+      redis:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+
+  email:
+    build:
+      context: ../src/services/email
+    image: shopstream/email:${IMAGE_TAG:-local}
+    environment:
+      PORT: "3000"
+      SMTP_HOST: mailhog
+      SMTP_PORT: "1025"
+      REDIS_URL: redis://redis:6379/2
+      SHOP_URL: http://localhost:3000
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:-local-compose-signing-key-change-me-000000}
+    depends_on:
+      mailhog:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+
+  gateway:
+    build:
+      context: ..
+      dockerfile: src/gateway/Dockerfile
+    image: shopstream/gateway:${IMAGE_TAG:-local}
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      Logging__Format: json
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:-local-compose-signing-key-change-me-000000}
+      ReverseProxy__Clusters__identity__Destinations__primary__Address: http://identity:8080
+      ReverseProxy__Clusters__catalog__Destinations__primary__Address: http://catalog:8080
+      ReverseProxy__Clusters__orders__Destinations__primary__Address: http://orders:8080
+      ReverseProxy__Clusters__payments__Destinations__primary__Address: http://payments:8080
+      ReverseProxy__Clusters__inventory__Destinations__primary__Address: http://inventory:8000
+      ReverseProxy__Clusters__cart__Destinations__primary__Address: http://cart:3000
+      ReverseProxy__Clusters__email__Destinations__primary__Address: http://email:3000
+    ports:
+      - "5000:8080"
+    depends_on:
+      identity:
+        condition: service_healthy
+      catalog:
+        condition: service_healthy
+      orders:
+        condition: service_healthy
+      payments:
+        condition: service_healthy
+      inventory:
+        condition: service_healthy
+      cart:
+        condition: service_healthy
+      email:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ../react-frontend
+    image: shopstream/web:${IMAGE_TAG:-local}
+    ports:
+      - "3000:80"
+    depends_on:
+      gateway:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------- log aggregation
+  loki:
+    image: grafana/loki:2.8.4
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3100/ready | grep -q ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+
+  promtail:
+    image: grafana/promtail:2.8.4
+    command: ["-config.file=/etc/promtail/config.yml"]
+    volumes:
+      - ./observability/promtail.yml:/etc/promtail/config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      loki:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana:10.0.3
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./observability/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+    ports:
+      - "${GRAFANA_PORT:-3030}:3000"
+    depends_on:
+      loki:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  redis-data:
+  kafka-data:

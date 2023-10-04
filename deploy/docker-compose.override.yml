@@ -1,0 +1,58 @@
+# dev extras: every service on a host port
+services:
+  postgres:
+    ports:
+      - "5432:5432"
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  identity:
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+    ports:
+      - "5001:8080"
+
+  catalog:
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+    ports:
+      - "5002:8080"
+      - "5012:8081"
+
+  orders:
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+    ports:
+      - "5003:8080"
+
+  payments:
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+    ports:
+      - "5004:8080"
+
+  inventory:
+    environment:
+      LOG_FORMAT: json
+    ports:
+      - "8001:8000"
+
+  cart:
+    environment:
+      LOG_LEVEL: debug
+    ports:
+      - "3001:3000"
+
+  email:
+    ports:
+      - "3002:3000"
+
+  gateway:
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+
+  mailhog:
+    ports:
+      - "1025:1025"
