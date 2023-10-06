@@ -45,7 +45,7 @@ services:
   kafka:
     image: ${KAFKA_IMAGE:-bitnami/kafka:3.5.1}
     environment:
-      KAFKA_KRAFT_CLUSTER_ID: c2hvcC1zdHJlYW0tY2x1c3Rlcg
+      KAFKA_KRAFT_CLUSTER_ID: q3Kp9oYbRUmWc1sShO7xGA
       KAFKA_CFG_NODE_ID: "0"
       KAFKA_CFG_PROCESS_ROLES: controller,broker
       KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 0@kafka:9093
@@ -230,7 +230,7 @@ services:
       ReverseProxy__Clusters__cart__Destinations__primary__Address: http://cart:3000
       ReverseProxy__Clusters__email__Destinations__primary__Address: http://email:3000
     ports:
-      - "5000:8080"
+      - "${GATEWAY_PORT:-5000}:8080"
     depends_on:
       identity:
         condition: service_healthy
@@ -252,7 +252,7 @@ services:
       context: ../react-frontend
     image: shopstream/web:${IMAGE_TAG:-local}
     ports:
-      - "3000:80"
+      - "${WEB_PORT:-3000}:80"
     depends_on:
       gateway:
         condition: service_healthy
