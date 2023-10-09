@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: inventory
+  labels:
+    app.kubernetes.io/name: inventory
+    app.kubernetes.io/part-of: shop-stream
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: inventory
+  ports:
+  - name: http
+    port: 8000
+    targetPort: http

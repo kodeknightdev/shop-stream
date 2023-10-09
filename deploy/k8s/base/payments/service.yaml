@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: payments
+  labels:
+    app.kubernetes.io/name: payments
+    app.kubernetes.io/part-of: shop-stream
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: payments
+  ports:
+  - name: http
+    port: 8080
+    targetPort: http

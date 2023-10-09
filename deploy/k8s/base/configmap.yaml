@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shop-stream-config
+data:
+  ASPNETCORE_ENVIRONMENT: Production
+  POSTGRES_HOST: postgres
+  REDIS_HOST: redis
+  KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+  SMTP_HOST: mailhog
+  SMTP_PORT: "1025"
+  SHOP_URL: https://shop.example.com

@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: cart
+  labels:
+    app.kubernetes.io/name: cart
+    app.kubernetes.io/part-of: shop-stream
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: cart
+  ports:
+  - name: http
+    port: 3000
+    targetPort: http

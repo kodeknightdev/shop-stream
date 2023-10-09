@@ -1,0 +1,51 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+labels:
+  - pairs:
+      app.kubernetes.io/managed-by: kustomize
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secret.template.yaml
+  - ingress.yaml
+  - identity/deployment.yaml
+  - identity/service.yaml
+  - catalog/deployment.yaml
+  - catalog/service.yaml
+  - orders/deployment.yaml
+  - orders/service.yaml
+  - payments/deployment.yaml
+  - payments/service.yaml
+  - inventory/deployment.yaml
+  - inventory/service.yaml
+  - cart/deployment.yaml
+  - cart/service.yaml
+  - email/deployment.yaml
+  - email/service.yaml
+  - gateway/deployment.yaml
+  - gateway/service.yaml
+  - web/deployment.yaml
+  - web/service.yaml
+  - catalog/hpa.yaml
+  - orders/hpa.yaml
+images:
+  - name: shopstream/identity
+    newTag: 0.0.0
+  - name: shopstream/catalog
+    newTag: 0.0.0
+  - name: shopstream/orders
+    newTag: 0.0.0
+  - name: shopstream/payments
+    newTag: 0.0.0
+  - name: shopstream/inventory
+    newTag: 0.0.0
+  - name: shopstream/cart
+    newTag: 0.0.0
+  - name: shopstream/email
+    newTag: 0.0.0
+  - name: shopstream/gateway
+    newTag: 0.0.0
+  - name: shopstream/web
+    newTag: 0.0.0

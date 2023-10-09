@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: email
+  labels:
+    app.kubernetes.io/name: email
+    app.kubernetes.io/part-of: shop-stream
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: email
+  ports:
+  - name: http
+    port: 3000
+    targetPort: http

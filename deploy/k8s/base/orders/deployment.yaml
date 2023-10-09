@@ -1,0 +1,103 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orders
+  labels:
+    app.kubernetes.io/name: orders
+    app.kubernetes.io/part-of: shop-stream
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: orders
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: orders
+        app.kubernetes.io/part-of: shop-stream
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      containers:
+      - name: orders
+        image: "shopstream/orders:0.0.0"
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8080
+        env:
+        - name: ASPNETCORE_ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: shop-stream-config
+              key: ASPNETCORE_ENVIRONMENT
+        - name: Database__MigrateOnStartup
+          value: "true"
+        - name: Jwt__SigningKey
+          valueFrom:
+            secretKeyRef:
+              name: shop-stream-secrets
+              key: jwt-signing-key
+        - name: Kafka__BootstrapServers
+          valueFrom:
+            configMapKeyRef:
+              name: shop-stream-config
+              key: KAFKA_BOOTSTRAP_SERVERS
+        - name: POSTGRES_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: shop-stream-config
+              key: POSTGRES_HOST
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: shop-stream-secrets
+              key: postgres-user
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: shop-stream-secrets
+              key: postgres-password
+        - name: ConnectionStrings__OrdersDb
+          value: Host=$(POSTGRES_HOST);Database=orders_db;Username=$(POSTGRES_USER);Password=$(POSTGRES_PASSWORD)
+        - name: Services__CatalogGrpc
+          value: "http://catalog:8081"
+        - name: Services__Cart
+          value: "http://cart:3000"
+        - name: Services__Payments
+          value: http://payments:8080
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 20
+          periodSeconds: 15
+          timeoutSeconds: 3
+          failureThreshold: 4
+        resources:
+          requests:
+            cpu: 150m
+            memory: 160Mi
+          limits:
+            cpu: 750m
+            memory: 512Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
