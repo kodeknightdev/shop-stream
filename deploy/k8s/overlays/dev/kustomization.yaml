@@ -1,0 +1,76 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: shop-stream-dev
+
+resources:
+  - ../../base
+  - infra/postgres.yaml
+  - infra/redis.yaml
+  - infra/kafka.yaml
+  - infra/mailhog.yaml
+
+configMapGenerator:
+  - name: kafka-topic-script
+    files:
+      - create-topics.sh=infra/create-topics.sh
+  - name: shop-stream-config
+    behavior: merge
+    literals:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - SHOP_URL=https://shop-dev.example.com
+
+patches:
+  - target:
+      kind: Namespace
+      name: shop-stream
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: shop-stream-dev
+  - target:
+      kind: Ingress
+      name: shop-stream
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: shop-dev.example.com
+  # no need to scale in dev
+  - target:
+      kind: HorizontalPodAutoscaler
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+      - op: replace
+        path: /spec/maxReplicas
+        value: 2
+
+images:
+  - name: shopstream/identity
+    newName: shopstreamacr.azurecr.io/shop-stream/identity
+    newTag: dev
+  - name: shopstream/catalog
+    newName: shopstreamacr.azurecr.io/shop-stream/catalog
+    newTag: dev
+  - name: shopstream/orders
+    newName: shopstreamacr.azurecr.io/shop-stream/orders
+    newTag: dev
+  - name: shopstream/payments
+    newName: shopstreamacr.azurecr.io/shop-stream/payments
+    newTag: dev
+  - name: shopstream/inventory
+    newName: shopstreamacr.azurecr.io/shop-stream/inventory
+    newTag: dev
+  - name: shopstream/cart
+    newName: shopstreamacr.azurecr.io/shop-stream/cart
+    newTag: dev
+  - name: shopstream/email
+    newName: shopstreamacr.azurecr.io/shop-stream/email
+    newTag: dev
+  - name: shopstream/gateway
+    newName: shopstreamacr.azurecr.io/shop-stream/gateway
+    newTag: dev
+  - name: shopstream/web
+    newName: shopstreamacr.azurecr.io/shop-stream/web
+    newTag: dev
