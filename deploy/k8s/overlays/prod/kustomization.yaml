@@ -1,0 +1,92 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: shop-stream
+
+resources:
+  - ../../base
+  - pdb.yaml
+
+# managed services (placeholder hostnames)
+configMapGenerator:
+  - name: shop-stream-config
+    behavior: merge
+    literals:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - POSTGRES_HOST=shopstream-pg.postgres.database.azure.com
+      - REDIS_HOST=shopstream-redis.redis.cache.windows.net
+      - KAFKA_BOOTSTRAP_SERVERS=kafka.shop-stream-infra.svc.cluster.local:9092
+      - SMTP_HOST=smtp.example.com
+      - SMTP_PORT=587
+      - SHOP_URL=https://shop.example.com
+
+replicas:
+  - name: identity
+    count: 2
+  - name: payments
+    count: 2
+  - name: inventory
+    count: 2
+  - name: cart
+    count: 2
+  - name: email
+    count: 2
+  - name: gateway
+    count: 3
+  - name: web
+    count: 2
+
+patches:
+  - path: resources-patch.yaml
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: orders
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 3
+      - op: replace
+        path: /spec/maxReplicas
+        value: 12
+  - target:
+      kind: Ingress
+      name: shop-stream
+    patch: |-
+      - op: add
+        path: /spec/tls
+        value:
+          - hosts:
+              - shop.example.com
+            secretName: shop-stream-tls
+      - op: add
+        path: /metadata/annotations/nginx.ingress.kubernetes.io~1ssl-redirect
+        value: "true"
+
+images:
+  - name: shopstream/identity
+    newName: shopstreamacr.azurecr.io/shop-stream/identity
+    newTag: 1.0.0
+  - name: shopstream/catalog
+    newName: shopstreamacr.azurecr.io/shop-stream/catalog
+    newTag: 1.0.0
+  - name: shopstream/orders
+    newName: shopstreamacr.azurecr.io/shop-stream/orders
+    newTag: 1.0.0
+  - name: shopstream/payments
+    newName: shopstreamacr.azurecr.io/shop-stream/payments
+    newTag: 1.0.0
+  - name: shopstream/inventory
+    newName: shopstreamacr.azurecr.io/shop-stream/inventory
+    newTag: 1.0.0
+  - name: shopstream/cart
+    newName: shopstreamacr.azurecr.io/shop-stream/cart
+    newTag: 1.0.0
+  - name: shopstream/email
+    newName: shopstreamacr.azurecr.io/shop-stream/email
+    newTag: 1.0.0
+  - name: shopstream/gateway
+    newName: shopstreamacr.azurecr.io/shop-stream/gateway
+    newTag: 1.0.0
+  - name: shopstream/web
+    newName: shopstreamacr.azurecr.io/shop-stream/web
+    newTag: 1.0.0
