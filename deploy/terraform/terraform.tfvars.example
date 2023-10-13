@@ -1,0 +1,6 @@
+# copy to terraform.tfvars (git-ignored)
+subscription_id = "00000000-0000-0000-0000-000000000000"
+tenant_id       = "00000000-0000-0000-0000-000000000000"
+environment     = "dev"
+location        = "westeurope"
+# postgres_admin_password: use TF_VAR_postgres_admin_password
