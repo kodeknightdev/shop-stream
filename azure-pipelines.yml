@@ -1,0 +1,380 @@
+# shop-stream CI/CD: build & test -> images -> deploy dev -> deploy prod
+
+trigger:
+  batch: true
+  branches:
+    include:
+      - main
+      - release/*
+  paths:
+    include:
+      - src/*
+      - react-frontend/*
+      - shared/*
+      - tests/*
+      - deploy/*
+      - azure-pipelines.yml
+      - global.json
+      - Directory.Build.props
+      - ShopStream.sln
+    exclude:
+      - '**/*.md'
+
+pr:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - src/*
+      - react-frontend/*
+      - shared/*
+      - tests/*
+      - deploy/*
+      - azure-pipelines.yml
+
+parameters:
+  - name: services
+    type: object
+    default:
+      - name: identity
+        dockerfile: src/services/identity/Dockerfile
+        context: .
+        paths: src/services/identity shared
+      - name: catalog
+        dockerfile: src/services/catalog/Dockerfile
+        context: .
+        paths: src/services/catalog shared
+      - name: orders
+        dockerfile: src/services/orders/Dockerfile
+        context: .
+        paths: src/services/orders shared
+      - name: payments
+        dockerfile: src/services/payments/Dockerfile
+        context: .
+        paths: src/services/payments shared
+      - name: gateway
+        dockerfile: src/gateway/Dockerfile
+        context: .
+        paths: src/gateway shared
+      - name: inventory
+        dockerfile: src/services/inventory/Dockerfile
+        context: src/services/inventory
+        paths: src/services/inventory
+      - name: cart
+        dockerfile: src/services/cart/Dockerfile
+        context: src/services/cart
+        paths: src/services/cart
+      - name: email
+        dockerfile: src/services/email/Dockerfile
+        context: src/services/email
+        paths: src/services/email
+      - name: web
+        dockerfile: react-frontend/Dockerfile
+        context: react-frontend
+        paths: react-frontend
+
+variables:
+  - group: shop-stream-common          # acrLoginServer, jwt key, etc. (placeholders)
+  - name: dotnetSdkVersion
+    value: 7.0.401
+  - name: nodeVersion
+    value: 18.x
+  - name: pythonVersion
+    value: '3.11'
+  - name: buildConfiguration
+    value: Release
+  - name: imageRepositoryPrefix
+    value: shop-stream
+  - name: imageTag
+    value: $(Build.BuildId)
+  - name: isMain
+    value: $[eq(variables['Build.SourceBranch'], 'refs/heads/main')]
+
+stages:
+  # ------------------------------------------------------------------ 1. build & test
+  - stage: BuildAndTest
+    displayName: Build & Test
+    jobs:
+      - job: dotnet
+        displayName: .NET services
+        pool:
+          vmImage: ubuntu-22.04
+        steps:
+          - task: UseDotNet@2
+            displayName: Use .NET SDK $(dotnetSdkVersion)
+            inputs:
+              packageType: sdk
+              version: $(dotnetSdkVersion)
+
+          - task: DotNetCoreCLI@2
+            displayName: Restore
+            inputs:
+              command: restore
+              projects: ShopStream.sln
+
+          - task: DotNetCoreCLI@2
+            displayName: Build
+            inputs:
+              command: build
+              projects: ShopStream.sln
+              arguments: --configuration $(buildConfiguration) --no-restore
+
+          - task: DotNetCoreCLI@2
+            displayName: Test
+            inputs:
+              command: test
+              projects: tests/**/*.Tests.csproj;tests/**/*.UnitTests.csproj;tests/**/*.IntegrationTests.csproj
+              arguments: >-
+                --configuration $(buildConfiguration) --no-build
+                --collect "XPlat Code Coverage"
+                --logger trx --results-directory $(Agent.TempDirectory)/TestResults
+              publishTestResults: false
+
+          - task: PublishTestResults@2
+            displayName: Publish .NET test results
+            condition: succeededOrFailed()
+            inputs:
+              testResultsFormat: VSTest
+              testResultsFiles: '**/*.trx'
+              searchFolder: $(Agent.TempDirectory)/TestResults
+              testRunTitle: dotnet
+
+          - task: PublishCodeCoverageResults@1
+            displayName: Publish coverage
+            condition: succeededOrFailed()
+            inputs:
+              codeCoverageTool: Cobertura
+              summaryFileLocation: $(Agent.TempDirectory)/TestResults/**/coverage.cobertura.xml
+
+      - job: node
+        displayName: Node services
+        pool:
+          vmImage: ubuntu-22.04
+        strategy:
+          matrix:
+            cart:
+              servicePath: src/services/cart
+            email:
+              servicePath: src/services/email
+        steps:
+          - task: NodeTool@0
+            inputs:
+              versionSpec: $(nodeVersion)
+          - script: npm ci
+            displayName: npm ci
+            workingDirectory: $(servicePath)
+          - script: npm test -- --ci --coverage
+            displayName: npm test
+            workingDirectory: $(servicePath)
+          - script: npm run build --if-present
+            displayName: npm run build
+            workingDirectory: $(servicePath)
+
+      - job: python
+        displayName: Inventory (Python)
+        pool:
+          vmImage: ubuntu-22.04
+        steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: $(pythonVersion)
+          - script: pip install -r requirements.txt
+            displayName: pip install
+            workingDirectory: src/services/inventory
+          - script: python -m pytest --junitxml=$(Agent.TempDirectory)/pytest-results.xml
+            displayName: pytest
+            workingDirectory: src/services/inventory
+          - task: PublishTestResults@2
+            condition: succeededOrFailed()
+            inputs:
+              testResultsFormat: JUnit
+              testResultsFiles: $(Agent.TempDirectory)/pytest-results.xml
+              testRunTitle: inventory
+
+      - job: react
+        displayName: React frontend
+        pool:
+          vmImage: ubuntu-22.04
+        steps:
+          - task: NodeTool@0
+            inputs:
+              versionSpec: $(nodeVersion)
+          - script: npm ci
+            workingDirectory: react-frontend
+            displayName: npm ci
+          - script: npx vitest run --reporter=default --reporter=junit --outputFile=$(Agent.TempDirectory)/vitest-results.xml
+            workingDirectory: react-frontend
+            displayName: vitest
+          - script: npm run build
+            workingDirectory: react-frontend
+            displayName: vite build
+          - task: PublishTestResults@2
+            condition: succeededOrFailed()
+            inputs:
+              testResultsFormat: JUnit
+              testResultsFiles: $(Agent.TempDirectory)/vitest-results.xml
+              testRunTitle: react
+
+      - job: terraform
+        displayName: Terraform validate
+        pool:
+          vmImage: ubuntu-22.04
+        steps:
+          - script: |
+              set -e
+              run() { docker run --rm -v "$(Build.SourcesDirectory)/deploy/terraform":/tf -w /tf hashicorp/terraform:1.5.7 "$@"; }
+              run fmt -check -recursive
+              run init -backend=false -input=false
+              run validate
+            displayName: terraform fmt / init / validate (no apply)
+
+  # ------------------------------------------------------------------ 2. images
+  - stage: Images
+    displayName: Images
+    dependsOn: BuildAndTest
+    condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+    jobs:
+      - job: detect
+        displayName: Detect changed services
+        pool:
+          vmImage: ubuntu-22.04
+        steps:
+          - checkout: self
+            fetchDepth: 0
+          - ${{ each svc in parameters.services }}:
+              - bash: |
+                  set -euo pipefail
+                  if [ "$(Build.Reason)" = "Manual" ] || ! git rev-parse HEAD~1 >/dev/null 2>&1; then
+                    changed=true
+                  elif git diff --quiet HEAD~1 HEAD -- ${{ svc.paths }}; then
+                    changed=false
+                  else
+                    changed=true
+                  fi
+                  echo "${{ svc.name }} changed: $changed"
+                  echo "##vso[task.setvariable variable=changed;isOutput=true]$changed"
+                name: changes_${{ svc.name }}
+                displayName: Changes in ${{ svc.name }}
+
+      - ${{ each svc in parameters.services }}:
+          - job: image_${{ svc.name }}
+            displayName: ${{ svc.name }} image
+            dependsOn: detect
+            condition: eq(dependencies.detect.outputs['changes_${{ svc.name }}.changed'], 'true')
+            pool:
+              vmImage: ubuntu-22.04
+            steps:
+              - task: Docker@2
+                displayName: Build and push ${{ svc.name }}
+                inputs:
+                  command: buildAndPush
+                  containerRegistry: acr-connection
+                  repository: $(imageRepositoryPrefix)/${{ svc.name }}
+                  Dockerfile: ${{ svc.dockerfile }}
+                  buildContext: ${{ svc.context }}
+                  tags: |
+                    $(imageTag)
+
+  # ------------------------------------------------------------------ 3. deploy dev
+  - stage: DeployDev
+    displayName: Deploy Dev
+    dependsOn: Images
+    condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+    jobs:
+      - deployment: aks_dev
+        displayName: AKS dev
+        environment: shop-stream-dev
+        pool:
+          vmImage: ubuntu-22.04
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                - task: KubernetesManifest@0
+                  name: bake
+                  displayName: Bake overlays/dev
+                  inputs:
+                    action: bake
+                    renderType: kustomize
+                    kustomizationPath: deploy/k8s/overlays/dev
+                - task: KubernetesManifest@0
+                  displayName: Deploy to AKS dev
+                  inputs:
+                    action: deploy
+                    kubernetesServiceConnection: aks-dev-connection
+                    namespace: shop-stream-dev
+                    manifests: $(bake.manifestsBundle)
+                    containers: |
+                      $(acrLoginServer)/$(imageRepositoryPrefix)/identity:$(imageTag)
+                      $(acrLoginServer)/$(imageRepositoryPrefix)/catalog:$(imageTag)
+                      $(acrLoginServer)/$(imageRepositoryPrefix)/orders:$(imageTag)
+                      $(acrLoginServer)/$(imageRepositoryPrefix)/payments:$(imageTag)
+                      $(acrLoginServer)/$(imageRepositoryPrefix)/gateway:$(imageTag)
+                      $(acrLoginServer)/$(imageRepositoryPrefix)/inventory:$(imageTag)
+                      $(acrLoginServer)/$(imageRepositoryPrefix)/cart:$(imageTag)
+                      $(acrLoginServer)/$(imageRepositoryPrefix)/email:$(imageTag)
+                      $(acrLoginServer)/$(imageRepositoryPrefix)/web:$(imageTag)
+
+  # ------------------------------------------------------------------ 4. deploy prod
+  - stage: DeployProd
+    displayName: Deploy Prod
+    dependsOn: DeployDev
+    condition: and(succeeded(), eq(variables.isMain, true))
+    jobs:
+      - deployment: aks_prod
+        displayName: AKS prod
+        # approval check is configured on the environment
+        environment: shop-stream-prod
+        pool:
+          vmImage: ubuntu-22.04
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                - task: KubernetesManifest@0
+                  name: bake
+                  displayName: Bake overlays/prod
+                  inputs:
+                    action: bake
+                    renderType: kustomize
+                    kustomizationPath: deploy/k8s/overlays/prod
+                - task: KubernetesManifest@0
+                  displayName: Deploy to AKS prod
+                  inputs:
+                    action: deploy
+                    kubernetesServiceConnection: aks-prod-connection
+                    namespace: shop-stream
+                    strategy: canary
+                    percentage: 25
+                    manifests: $(bake.manifestsBundle)
+                    containers: |
+                      $(acrLoginServer)/$(imageRepositoryPrefix)/identity:$(imageTag)
+                      $(acrLoginServer)/$(imageRepositoryPrefix)/catalog:$(imageTag)
+                      $(acrLoginServer)/$(imageRepositoryPrefix)/orders:$(imageTag)
+                      $(acrLoginServer)/$(imageRepositoryPrefix)/payments:$(imageTag)
+                      $(acrLoginServer)/$(imageRepositoryPrefix)/gateway:$(imageTag)
+                      $(acrLoginServer)/$(imageRepositoryPrefix)/inventory:$(imageTag)
+                      $(acrLoginServer)/$(imageRepositoryPrefix)/cart:$(imageTag)
+                      $(acrLoginServer)/$(imageRepositoryPrefix)/email:$(imageTag)
+                      $(acrLoginServer)/$(imageRepositoryPrefix)/web:$(imageTag)
+                - task: KubernetesManifest@0
+                  displayName: Promote canary
+                  inputs:
+                    action: promote
+                    kubernetesServiceConnection: aks-prod-connection
+                    namespace: shop-stream
+                    strategy: canary
+                    manifests: $(bake.manifestsBundle)
+                    containers: |
+                      $(acrLoginServer)/$(imageRepositoryPrefix)/identity:$(imageTag)
+                      $(acrLoginServer)/$(imageRepositoryPrefix)/catalog:$(imageTag)
+                      $(acrLoginServer)/$(imageRepositoryPrefix)/orders:$(imageTag)
+                      $(acrLoginServer)/$(imageRepositoryPrefix)/payments:$(imageTag)
+                      $(acrLoginServer)/$(imageRepositoryPrefix)/gateway:$(imageTag)
+                      $(acrLoginServer)/$(imageRepositoryPrefix)/inventory:$(imageTag)
+                      $(acrLoginServer)/$(imageRepositoryPrefix)/cart:$(imageTag)
+                      $(acrLoginServer)/$(imageRepositoryPrefix)/email:$(imageTag)
+                      $(acrLoginServer)/$(imageRepositoryPrefix)/web:$(imageTag)
