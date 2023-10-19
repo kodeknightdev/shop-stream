@@ -1,7 +1,7 @@
 # inventory (Python)
 
 Stock levels and reservations. FastAPI + SQLAlchemy 2.0 on PostgreSQL, Redis for a short availability
-cache, confluent-kafka for events.
+cache (cache-aside, 15 s), confluent-kafka for events.
 
 - `available = on_hand - reserved`; `lowStock` when available ≤ threshold (5 by default)
 - An order reserves **all or nothing** inside one transaction with row locks (`SELECT ... FOR UPDATE`)
@@ -27,7 +27,9 @@ OpenAPI: `/docs` and `/openapi.json`. Errors are `application/problem+json`.
 - Consumes (group `inventory`): `orders.order-placed`, `orders.order-cancelled`,
   `payments.payment-succeeded`, and the `.retry` topic of each
 - Produces: `inventory.stock-reserved`, `inventory.stock-rejected`
-- Failures: `<topic>.retry` (exponential backoff) → `<topic>.dlq`
+- Idempotent: handled event ids go into the `processed_events` table in the same transaction as the
+  stock change (`InventoryService._commit`)
+- Failures: `<topic>.retry` with exponential backoff ([retry.py](app/retry.py)), then `<topic>.dlq`
 
 ## Run
 

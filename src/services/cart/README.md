@@ -23,10 +23,15 @@ gRPC at checkout, so the cart is never the source of truth for money.
 Validation with zod; errors are `application/problem+json`. OpenAPI at `/api-docs`
 (`/api-docs/openapi.json`).
 
+Calls to catalog go through a cockatiel policy - bulkhead → retry → circuit breaker → timeout - in
+[catalogClient.js](src/catalogClient.js). While catalog is down, adds fail fast with a 503.
+
 ## Kafka
 
-- Consumes (group `cart`): `catalog.product-price-changed` and its `.retry` topic
-- Failures: `<topic>.retry` (exponential backoff) → `<topic>.dlq`
+- Consumes (group `cart`): `catalog.product-price-changed` and its `.retry` topic. The event carries the
+  new price, so carts are flagged without calling catalog back (event-carried state transfer)
+- Idempotent: handled event ids are kept in Redis under `cart:processed_events:<id>` ([inbox.js](src/inbox.js))
+- Failures: `catalog.product-price-changed.retry` with backoff, then `catalog.product-price-changed.dlq`
 
 ## Run
 

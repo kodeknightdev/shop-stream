@@ -23,7 +23,8 @@ kubectl -n shop-stream-dev create secret generic shop-stream-secrets \
   --from-literal=jwt-signing-key=... \
   --from-literal=postgres-user=shopstream \
   --from-literal=postgres-password=... \
-  --from-literal=stripe-secret-key=
+  --from-literal=stripe-secret-key= \
+  --from-literal=seed-demo-password=Demo@12345   # dev overlay only: demo accounts are seeded in Development
 ```
 
 Targets AKS 1.25-1.27 APIs (`apps/v1`, `networking.k8s.io/v1`, `autoscaling/v2`, `policy/v1`) and

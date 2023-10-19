@@ -28,13 +28,18 @@ None - identity is purely synchronous.
 
 ## Data
 
-`identity_db`: `users`, `refresh_tokens`. Migrations in `Data/Migrations`, applied automatically in
-Development or when `Database__MigrateOnStartup=true`. Demo users are seeded on startup.
+`identity_db`: `users`, `refresh_tokens`. Migrations in `Data/Migrations` are applied automatically in
+Development or when `Database__MigrateOnStartup=true`.
+
+In **Development only**, the seeder creates the demo accounts `admin@shopstream.local`,
+`customer@shopstream.local` and `jane@shopstream.local`, all with the password from
+`SEED_DEMO_PASSWORD` (`Demo@12345` in `.env.example` - local demo data). Their ids are fixed in
+`ShopStream.Contracts.DemoAccounts`, so orders and payments can seed Jane's history.
 
 ## Run
 
 ```bash
-dotnet run --project src/services/identity/ShopStream.Identity   # http://localhost:5001
+dotnet run --project src/services/identity/ShopStream.Identity   # http://localhost:5001 (launch profile sets SEED_DEMO_PASSWORD)
 ```
 
 Config: `ConnectionStrings__IdentityDb`, `Jwt__SigningKey`, `Jwt__AccessTokenMinutes`, `Jwt__RefreshTokenDays`.

@@ -2,7 +2,9 @@
 
 Turns saga events into customer emails. Templates are Handlebars files in `templates/` wrapped in a
 shared `layout.hbs`; mail goes out through nodemailer to MailHog locally (any SMTP server elsewhere).
-The service keeps no database - the last 100 sends are kept in memory and everything is logged.
+The service keeps no business data - the last 100 sends are kept in memory for the admin view and
+everything is logged. Handled event ids are stored in Redis (`email:processed_events:<id>`), so a
+restart never re-sends a mail ([inbox.service.ts](src/inbox/inbox.service.ts)).
 
 | Event | Template | Subject |
 |---|---|---|
@@ -18,14 +20,15 @@ The service keeps no database - the last 100 sends are kept in memory and everyt
 | GET | `/api/emails/recent?limit=` | Admin |
 | GET | `/api/emails/templates` | Admin |
 | POST | `/api/emails/preview` `{ template, data }` → HTML | Admin |
-| GET | `/health`, `/health/ready` (SMTP + Kafka) | - |
+| GET | `/health`, `/health/ready` (SMTP + Kafka + Redis) | - |
 
 Validation via class-validator; errors are problem details. Swagger at `/api-docs`.
 
 ## Kafka
 
 - Consumes (group `email`): the four topics above and their `.retry` topics
-- SMTP failures go to `<topic>.retry` with backoff, then `<topic>.dlq`; duplicate event ids are skipped
+- SMTP failures go to `<topic>.retry` with exponential backoff, then `<topic>.dlq`. An event is
+  recorded in the inbox only after SMTP accepted the mail
 
 ## Run
 
@@ -37,4 +40,4 @@ JWT_SIGNING_KEY=local-dev-signing-key-not-for-production-0001 npm start   # :300
 npm test
 ```
 
-Env: `PORT`, `SMTP_HOST`, `SMTP_PORT`, `MAIL_FROM`, `SHOP_URL`, `KAFKA_ENABLED`, `KAFKA_BOOTSTRAP_SERVERS`, `JWT_SIGNING_KEY`.
+Env: `PORT`, `SMTP_HOST`, `SMTP_PORT`, `MAIL_FROM`, `SHOP_URL`, `REDIS_URL`, `KAFKA_ENABLED`, `KAFKA_BOOTSTRAP_SERVERS`, `JWT_SIGNING_KEY`.

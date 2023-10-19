@@ -7,7 +7,7 @@ Storefront and admin UI: React 18, Vite 4, TypeScript, React Router 6, TanStack 
 | `/` | catalog with search, category & price filters, sorting, paging |
 | `/products/:id` | product detail with stock level |
 | `/cart`, `/checkout` | cart (stale price warning) and checkout with Stripe test cards |
-| `/orders`, `/orders/:id` | history and live status timeline (polls until confirmed/cancelled) |
+| `/orders`, `/orders/:id` | history, and the order page built from `GET /api/orders/{id}/details` (order + payment + current prices); polls until confirmed/cancelled |
 | `/admin` | sales dashboard, orders, products (CRUD), inventory (adjust stock) |
 
 All calls go to `/api` on the same origin: Vite proxies to the gateway in development
