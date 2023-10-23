@@ -1,10 +1,11 @@
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { cartApi, ordersApi, paymentsApi } from '../api/endpoints';
 import type { ShippingAddress } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { ErrorMessage, Spinner } from '../components/ErrorMessage';
+import { clearCheckoutKey, getCheckoutKey } from '../lib/checkoutKey';
 import { formatMoney } from '../lib/format';
 
 // Stripe test cards (the mock provider knows the same ids)
@@ -21,15 +22,16 @@ export function CheckoutPage() {
   const queryClient = useQueryClient();
   const cart = useQuery({ queryKey: ['cart'], queryFn: cartApi.get });
   const provider = useQuery({ queryKey: ['payment-provider'], queryFn: paymentsApi.provider, retry: false });
-  const idempotencyKey = useMemo(() => crypto.randomUUID(), []);
   const [address, setAddress] = useState<ShippingAddress>({
     fullName: user?.fullName ?? '', line1: '', line2: '', city: '', postalCode: '', country: 'US',
   });
   const [paymentMethod, setPaymentMethod] = useState(TEST_CARDS[0].id);
 
   const place = useMutation({
-    mutationFn: () => ordersApi.place({ ...address, line2: address.line2 || undefined }, paymentMethod, idempotencyKey),
+    mutationFn: () => ordersApi.place({ ...address, line2: address.line2 || undefined }, paymentMethod,
+      getCheckoutKey(user!.id, cart.data?.items ?? [])),
     onSuccess: (order) => {
+      clearCheckoutKey();
       queryClient.invalidateQueries({ queryKey: ['cart'] });
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       navigate(`/orders/${order.id}`, { state: { justPlaced: true, adjustments: order.priceAdjustments } });
